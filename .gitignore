@@ -1,0 +1,16 @@
+# Maven build output
+**/target/
+
+# IDE files
+.idea/
+*.iml
+
+# Compiled class files
+*.class
+
+# Test files
+*Test.java
+**/test/
+
+# Development configuration
+**/application-dev.yml
