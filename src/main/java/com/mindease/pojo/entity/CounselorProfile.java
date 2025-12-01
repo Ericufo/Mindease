@@ -32,6 +32,8 @@ public class CounselorProfile implements Serializable {
 
     private String location;
 
+    private String workSchedule;  // 排班配置 JSON 字符串
+
     private BigDecimal pricePerHour;
 
     private BigDecimal rating;
