@@ -17,3 +17,8 @@ mybatis:
     #开启驼峰命名
     map-underscore-to-camel-case: true
 
+mindease:
+  jwt:
+    secret-key: mindease-jwt-secret-key-2024-secure-key-for-hmac-sha256
+    ttl: 7200000
+

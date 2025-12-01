@@ -39,8 +39,9 @@ public class CommonController {
         //TODO: 自定义jwt工具类，生成jwt令牌，定义jwt令牌校验的拦截器
         String token = "";
         UserLoginVO userLoginVO = UserLoginVO.builder()
-                .id(user.getId())
+                .userId(user.getId())
                 .username(user.getUsername())
+                .nickname(user.getNickname())
                 .role(user.getRole())
                 .token(token)
                 .build();
