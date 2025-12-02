@@ -232,6 +232,7 @@ CREATE TABLE `counselor_audit_record` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='咨询师资质审核记录表';
 
 -- 1.3 咨询师公开资料表
+
 DROP TABLE IF EXISTS `counselor_profile`;
 CREATE TABLE `counselor_profile` (
     `user_id` BIGINT NOT NULL COMMENT '关联sys_user.id',
@@ -242,11 +243,14 @@ CREATE TABLE `counselor_profile` (
     `bio` TEXT COMMENT '个人简介',
     `qualification_url` VARCHAR(512) COMMENT '当前展示的证书URL',
     `location` VARCHAR(128) COMMENT '所在地区',
+    `work_schedule` JSON DEFAULT NULL COMMENT '排班配置: {"workDays":[1,2], "workHours":[{"start":"09:00","end":"12:00"}]}',
     `price_per_hour` DECIMAL(10, 2) DEFAULT 0.00 COMMENT '咨询价格/小时',
     `rating` DECIMAL(3, 1) DEFAULT 5.0 COMMENT '综合评分',
     `review_count` INT DEFAULT 0 COMMENT '评价总数',
     PRIMARY KEY (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='咨询师公开资料表';
+
+
 
 -- 1.4 系统通知表
 DROP TABLE IF EXISTS `sys_notification`;
@@ -288,11 +292,13 @@ CREATE TABLE `mood_log` (
 -- 量表定义
 DROP TABLE IF EXISTS `assessment_scale`;
 CREATE TABLE `assessment_scale` (
-    `id` BIGINT NOT NULL AUTO_INCREMENT,
-    `scale_key` VARCHAR(32) NOT NULL COMMENT '量表唯一标识',
-    `title` VARCHAR(64) NOT NULL COMMENT '标题',
-    `description` VARCHAR(512) COMMENT '描述',
-    `status` VARCHAR(20) DEFAULT 'active' COMMENT '状态',
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `scale_key` VARCHAR(32) NOT NULL COMMENT '量表唯一标识(如gad-7)',
+    `title` VARCHAR(64) NOT NULL COMMENT '量表标题',
+    `cover_url` VARCHAR(512) DEFAULT NULL COMMENT '量表封面图片URL',
+    `description` VARCHAR(512) DEFAULT NULL COMMENT '量表描述/引导语',
+    `scoring_rules` JSON DEFAULT NULL COMMENT '评分规则JSON数组: [{"min":0,"max":5,"level":"正常","desc":"建议..."}]',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态: active上架, inactive下架',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_scale_key` (`scale_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='心理量表定义表';
@@ -399,3 +405,22 @@ CREATE TABLE `counselor_review` (
     KEY `idx_counselor_id` (`counselor_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='咨询评价表';
 ```
+
+
+
+INSERT INTO sys_user (
+    username, 
+    password, 
+    nickname, 
+    role, 
+    status, 
+    create_time
+) 
+VALUES (
+    'admin',
+    'e10adc3949ba59abbe56e057f20f883e',
+    '系统管理员',
+    'admin',
+    1,
+    NOW()
+);
