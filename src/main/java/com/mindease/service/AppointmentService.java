@@ -69,5 +69,14 @@ public interface AppointmentService {
      * @param appointmentId
      */
     void confirmAppointment(Long counselorId, Long appointmentId);
+
+    /**
+     * 自动更新已过期的确认预约为已完成状态
+     * 检查条件：预约状态为CONFIRMED且结束时间已过
+     *
+     * @param userId 用户ID（可选，如果提供则只更新该用户相关的预约）
+     * @return 更新的预约数量
+     */
+    int autoCompleteExpiredAppointments(Long userId);
 }
 

@@ -13,6 +13,7 @@ import com.mindease.pojo.vo.UserLoginVO;
 import com.mindease.pojo.vo.UserProfileVO;
 import com.mindease.pojo.vo.UserRegisterVO;
 import com.mindease.pojo.vo.UserUpdateVO;
+import com.mindease.service.AppointmentService;
 import com.mindease.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,9 @@ public class AuthController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private AppointmentService appointmentService;
 
     @Value("${mindease.jwt.secret-key}")
     private String secretKey;
@@ -86,6 +90,14 @@ public class AuthController {
         log.info("用户登录:{}", userLoginDTO);
 
         User user = userService.login(userLoginDTO, false);
+
+        // 用户登录时，自动更新该用户已过期的预约状态
+        try {
+            appointmentService.autoCompleteExpiredAppointments(user.getId());
+        } catch (Exception e) {
+            log.error("自动更新预约状态失败", e);
+            // 不影响登录流程
+        }
 
         // 生成 JWT token
         Map<String, Object> claims = new HashMap<>();

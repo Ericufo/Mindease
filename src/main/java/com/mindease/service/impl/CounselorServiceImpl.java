@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mindease.common.exception.BaseException;
 import com.mindease.mapper.*;
+import org.springframework.transaction.annotation.Transactional;
 import com.mindease.pojo.dto.ReviewSubmitDTO;
 import com.mindease.pojo.entity.*;
 import com.mindease.pojo.vo.*;
@@ -13,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +39,12 @@ public class CounselorServiceImpl implements CounselorService {
 
     @Autowired
     private CounselorReviewMapper counselorReviewMapper;
+
+    @Autowired
+    private AppointmentMapper appointmentMapper;
+
+    @Autowired
+    private com.mindease.service.AppointmentService appointmentService;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -146,7 +154,7 @@ public class CounselorServiceImpl implements CounselorService {
                     .rating(profile.getRating())
                     .pricePerHour(profile.getPricePerHour())
                     .location(profile.getLocation())
-                    .nextAvailableTime(null) // TODO: 实现预约时段查询
+                    .nextAvailableTime(null) // 下一个可用时段（需前端调用可用时段接口获取）
                     .matchReason(matchReason)
                     .tags(tags)
                     .build();
@@ -203,7 +211,7 @@ public class CounselorServiceImpl implements CounselorService {
         List<String> specialtyList = parseJsonArray(profile.getSpecialty());
 
         // 提取评价中的高频词作为标签
-        List<String> tags = Arrays.asList("专业", "耐心", "温和"); // TODO: 从评价中提取
+        List<String> tags = extractTagsFromReviews(counselorId);
 
         return CounselorDetailVO.builder()
                 .id(counselorId)
@@ -256,12 +264,37 @@ public class CounselorServiceImpl implements CounselorService {
      * 提交评价
      */
     @Override
+    @Transactional
     public Long submitReview(Long userId, ReviewSubmitDTO reviewSubmitDTO) {
-        // TODO: 验证预约订单是否存在且已完成
+        // 在提交评价前，先自动更新该用户的已过期预约状态
+        appointmentService.autoCompleteExpiredAppointments(userId);
+
+        // 验证预约订单是否存在且已完成
+        Appointment appointment = appointmentMapper.getById(reviewSubmitDTO.getAppointmentId());
+        if (appointment == null) {
+            throw new BaseException("预约订单不存在");
+        }
+        
+        if (!appointment.getUserId().equals(userId)) {
+            throw new BaseException("无权评价该预约");
+        }
+        
+        if (!"COMPLETED".equals(appointment.getStatus())) {
+            throw new BaseException("只能评价已完成的预约");
+        }
+
+        // 检查是否已经评价过
+        int existingReviewCount = counselorReviewMapper.countByAppointmentId(reviewSubmitDTO.getAppointmentId());
+        if (existingReviewCount > 0) {
+            throw new BaseException("该预约已经评价过了");
+        }
+
+        // 从预约订单中获取counselorId
+        Long counselorId = appointment.getCounselorId();
 
         CounselorReview review = CounselorReview.builder()
                 .appointmentId(reviewSubmitDTO.getAppointmentId())
-                .counselorId(null) // TODO: 从预约订单中获取
+                .counselorId(counselorId)
                 .userId(userId)
                 .rating(reviewSubmitDTO.getRating())
                 .content(reviewSubmitDTO.getContent())
@@ -270,9 +303,79 @@ public class CounselorServiceImpl implements CounselorService {
 
         counselorReviewMapper.insert(review);
 
-        // TODO: 更新咨询师的评分统计
+        // 更新咨询师的评分统计
+        updateCounselorRating(counselorId);
 
         return review.getId();
+    }
+
+    /**
+     * 更新咨询师评分统计
+     */
+    private void updateCounselorRating(Long counselorId) {
+        // 查询该咨询师的所有评价
+        List<CounselorReview> reviews = counselorReviewMapper.listByCounselorId(counselorId);
+        
+        if (reviews.isEmpty()) {
+            return;
+        }
+
+        // 计算平均评分
+        double avgRating = reviews.stream()
+                .mapToInt(CounselorReview::getRating)
+                .average()
+                .orElse(5.0);
+
+        // 保留一位小数
+        BigDecimal rating = BigDecimal.valueOf(avgRating)
+                .setScale(1, RoundingMode.HALF_UP);
+
+        // 更新咨询师资料
+        CounselorProfile profile = counselorProfileMapper.getByUserId(counselorId);
+        if (profile != null) {
+            profile.setRating(rating);
+            profile.setReviewCount(reviews.size());
+            counselorProfileMapper.update(profile);
+        }
+    }
+
+    /**
+     * 从评价中提取标签
+     */
+    private List<String> extractTagsFromReviews(Long counselorId) {
+        List<CounselorReview> reviews = counselorReviewMapper.getByCounselorId(counselorId, 20, 0);
+        
+        if (reviews.isEmpty()) {
+            return Arrays.asList("暂无评价");
+        }
+
+        // 统计高频词（简化版本，使用预定义标签匹配）
+        List<String> predefinedTags = Arrays.asList(
+            "专业", "耐心", "温和", "负责", "细心", "热情", "友善", 
+            "经验丰富", "善于倾听", "有帮助", "靠谱", "值得信赖"
+        );
+        
+        List<String> matchedTags = new ArrayList<>();
+        String allContent = reviews.stream()
+                .map(CounselorReview::getContent)
+                .filter(content -> content != null && !content.isEmpty())
+                .collect(Collectors.joining(" "));
+
+        for (String tag : predefinedTags) {
+            if (allContent.contains(tag)) {
+                matchedTags.add(tag);
+                if (matchedTags.size() >= 3) {
+                    break;
+                }
+            }
+        }
+
+        // 如果没有匹配的标签，返回默认标签
+        if (matchedTags.isEmpty()) {
+            matchedTags.add("专业咨询师");
+        }
+
+        return matchedTags;
     }
 
     /**

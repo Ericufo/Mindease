@@ -112,5 +112,16 @@ public interface AppointmentMapper {
                       @Param("status") String status,
                       @Param("cancelReason") String cancelReason,
                       @Param("updateTime") LocalDateTime updateTime);
+
+    /**
+     * 查询已过期的已确认预约（用于自动完成）
+     * 条件：状态为CONFIRMED且结束时间早于当前时间
+     *
+     * @param userId 用户ID（可选，为null则查询所有用户）
+     * @param currentTime 当前时间
+     * @return
+     */
+    List<Appointment> getExpiredConfirmedAppointments(@Param("userId") Long userId, 
+                                                       @Param("currentTime") LocalDateTime currentTime);
 }
 

@@ -53,5 +53,16 @@
         </if>
     </select>
 
+    <!-- 查询已过期的已确认预约（用于自动完成） -->
+    <select id="getExpiredConfirmedAppointments" resultMap="AppointmentMap">
+        SELECT * FROM appointment
+        WHERE status = 'CONFIRMED'
+        AND end_time <![CDATA[ < ]]> #{currentTime}
+        <if test="userId != null">
+            AND (user_id = #{userId} OR counselor_id = #{userId})
+        </if>
+        ORDER BY end_time ASC
+    </select>
+
 </mapper>
 

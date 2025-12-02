@@ -48,5 +48,23 @@ public interface CounselorReviewMapper {
      */
     @Select("select avg(rating) from counselor_review where counselor_id = #{counselorId}")
     Double getAvgRatingByCounselorId(Long counselorId);
+
+    /**
+     * 根据预约ID查询评价数量（用于检查是否已评价）
+     *
+     * @param appointmentId
+     * @return
+     */
+    @Select("select count(*) from counselor_review where appointment_id = #{appointmentId}")
+    int countByAppointmentId(Long appointmentId);
+
+    /**
+     * 查询咨询师的所有评价（用于计算评分）
+     *
+     * @param counselorId
+     * @return
+     */
+    @Select("select * from counselor_review where counselor_id = #{counselorId}")
+    List<CounselorReview> listByCounselorId(Long counselorId);
 }
 

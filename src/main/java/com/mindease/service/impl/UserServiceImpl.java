@@ -39,7 +39,6 @@ public class UserServiceImpl implements UserService {
             throw new AccountNotFoundException(MessageConstant.USER_NOT_FOUND);
         }
 
-        // TODO: 全局异常处理器
         // 进行md5加密，然后再进行比对
         password = DigestUtils.md5DigestAsHex(password.getBytes());
         if (!password.equals(user.getPassword())) {
@@ -59,10 +58,9 @@ public class UserServiceImpl implements UserService {
         }
 
         // 防止用户使用管理端登录
-        // TODO: 自定义权限不足异常类
         if (needAdmin) {
             if (!"ADMIN".equals(user.getRole()) && !"ROOT".equals(user.getRole())) {
-                throw new RuntimeException("权限不足，非管理员禁止访问");
+                throw new PermissionDeniedException("权限不足，非管理员禁止访问");
             }
         }
 

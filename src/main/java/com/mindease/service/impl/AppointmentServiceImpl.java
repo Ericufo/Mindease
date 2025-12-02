@@ -219,6 +219,9 @@ public class AppointmentServiceImpl implements AppointmentService {
     public AppointmentListVO getMyAppointments(Long userId, String userRole, String status, Integer page, Integer pageSize) {
         log.info("获取预约列表，用户ID:{}，角色:{}，状态:{}，页码:{}，每页:{}", userId, userRole, status, page, pageSize);
 
+        // 在查询预约列表前，自动更新已过期的预约状态
+        autoCompleteExpiredAppointments(userId);
+
         int offset = (page - 1) * pageSize;
 
         List<Appointment> appointments;
@@ -360,6 +363,45 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     /**
+     * 自动更新已过期的确认预约为已完成状态
+     * 检查条件：
+     * 1. 预约状态为CONFIRMED（已确认）
+     * 2. 预约结束时间已经过去
+     */
+    @Override
+    @Transactional
+    public int autoCompleteExpiredAppointments(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        
+        // 查询需要更新的预约
+        List<Appointment> expiredAppointments = appointmentMapper.getExpiredConfirmedAppointments(userId, now);
+        
+        if (expiredAppointments.isEmpty()) {
+            return 0;
+        }
+
+        int updatedCount = 0;
+        for (Appointment appointment : expiredAppointments) {
+            try {
+                // 更新状态为已完成
+                appointmentMapper.updateStatus(appointment.getId(), "COMPLETED", null, now);
+                
+                // 发送通知给用户，提醒可以评价
+                sendCompletionNotification(appointment.getUserId(), appointment.getCounselorId(), appointment.getStartTime());
+                
+                updatedCount++;
+                log.info("自动完成预约，预约ID: {}, 用户ID: {}, 咨询师ID: {}", 
+                        appointment.getId(), appointment.getUserId(), appointment.getCounselorId());
+            } catch (Exception e) {
+                log.error("自动完成预约失败，预约ID: {}", appointment.getId(), e);
+            }
+        }
+
+        log.info("自动完成预约任务执行完毕，总共更新 {} 条记录", updatedCount);
+        return updatedCount;
+    }
+
+    /**
      * 发送新预约通知给咨询师
      */
     private void sendNewAppointmentNotification(Long userId, Long counselorId, LocalDateTime startTime) {
@@ -441,6 +483,34 @@ public class AppointmentServiceImpl implements AppointmentService {
             log.info("已发送预约取消通知，接收人ID:{}", receiverId);
         } catch (Exception e) {
             log.error("发送预约取消通知失败", e);
+            // 不影响主流程，只记录日志
+        }
+    }
+
+    /**
+     * 发送咨询完成通知给用户
+     */
+    private void sendCompletionNotification(Long userId, Long counselorId, LocalDateTime startTime) {
+        try {
+            CounselorProfile profile = counselorProfileMapper.getByUserId(counselorId);
+            String counselorName = profile != null ? profile.getRealName() : "咨询师";
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+            String timeStr = startTime.format(formatter);
+
+            SysNotification notification = SysNotification.builder()
+                    .userId(userId)
+                    .type("appointment")
+                    .title("咨询已完成")
+                    .content(String.format("您与 %s 的咨询（%s）已完成，欢迎对本次咨询进行评价。", counselorName, timeStr))
+                    .isRead(0)
+                    .createTime(LocalDateTime.now())
+                    .build();
+
+            notificationMapper.insert(notification);
+            log.info("已发送咨询完成通知给用户，用户ID:{}", userId);
+        } catch (Exception e) {
+            log.error("发送咨询完成通知失败", e);
             // 不影响主流程，只记录日志
         }
     }
