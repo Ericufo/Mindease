@@ -192,9 +192,10 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
         // 1. 更新用户状态为启用
         User user = userMapper.getById(record.getUserId());
         if (user != null) {
-            user.setStatus(1);
+            user.setStatus(1);  // StatusConstant.ENABLE
             user.setUpdateTime(LocalDateTime.now());
-            userMapper.update(user);
+            userMapper.updateStatus(user);  // 使用专门更新状态的方法
+            log.info("咨询师账号状态已更新为启用，用户ID: {}", record.getUserId());
         }
 
         // 2. 创建或更新咨询师资料

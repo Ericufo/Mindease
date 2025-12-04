@@ -39,10 +39,18 @@ public interface UserMapper {
     User getById(Long id);
 
     /**
-     * 更新用户信息
+     * 更新用户基本信息（昵称、头像）
      *
      * @param user 用户
      */
     @Update("update sys_user set nickname = #{nickname}, avatar = #{avatar}, update_time = #{updateTime} where id = #{id}")
     void update(User user);
+
+    /**
+     * 更新用户状态
+     *
+     * @param user 用户（需要包含id、status、updateTime）
+     */
+    @Update("update sys_user set status = #{status}, update_time = #{updateTime} where id = #{id}")
+    void updateStatus(User user);
 }

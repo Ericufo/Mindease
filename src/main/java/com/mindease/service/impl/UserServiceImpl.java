@@ -48,8 +48,14 @@ public class UserServiceImpl implements UserService {
 
         // 检查账号状态
         if (user.getStatus() == StatusConstant.PENDING) {
-            // 账号待审核
+            // 咨询师在待审核状态下仍可登录，用于提交/查看审核资料
+            if ("COUNSELOR".equalsIgnoreCase(user.getRole())) {
+                // 允许咨询师登录，但功能受限（只能访问审核相关接口）
+                // 不抛出异常，继续登录流程
+            } else {
+                // 其他角色不允许待审核状态登录
             throw new AccountPendingException(MessageConstant.ACCOUNT_PENDING);
+            }
         }
 
         if (user.getStatus() == StatusConstant.DISABLE) {
