@@ -727,4 +727,3 @@ Headers:
 ---
 
 **MindEase Team** © 2025
-
