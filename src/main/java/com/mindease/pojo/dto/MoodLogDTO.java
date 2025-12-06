@@ -17,6 +17,5 @@ public class MoodLogDTO {
     
     private List<String> tags;
 
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime logDate;
 }
