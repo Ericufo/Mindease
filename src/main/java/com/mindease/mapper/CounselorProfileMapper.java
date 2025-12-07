@@ -33,8 +33,8 @@ public interface CounselorProfileMapper {
      * @param sort 排序方式
      * @return
      */
-    List<CounselorProfile> recommendCounselors(@Param("keywords") List<String> keywords, 
-                                                @Param("sort") String sort);
+    List<CounselorProfile> recommendCounselors(@Param("keywords") List<String> keywords,
+                                               @Param("sort") String sort);
 
     /**
      * 查询所有正常状态的咨询师

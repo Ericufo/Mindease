@@ -36,6 +36,14 @@ public interface SysNotificationMapper {
     void markAsRead(Long id);
 
     /**
+     * 将用户的所有通知标记为已读
+     *
+     * @param userId
+     */
+    @Update("update sys_notification set is_read = 1 where user_id = #{userId} and is_read = 0")
+    void markAllAsRead(Long userId);
+
+    /**
      * 根据ID查询通知
      *
      * @param id

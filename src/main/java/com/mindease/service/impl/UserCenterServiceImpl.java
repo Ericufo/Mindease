@@ -114,6 +114,15 @@ public class UserCenterServiceImpl implements UserCenterService {
     }
 
     /**
+     * 将当前用户的通知全部标记为已读
+     */
+    @Override
+    public void markAllNotificationsAsRead(Long userId) {
+        log.info("标记用户全部通知为已读，用户ID:{}", userId);
+        notificationMapper.markAllAsRead(userId);
+    }
+
+    /**
      * 获取情绪摘要
      */
     private MoodSummaryVO getMoodSummary(Long userId) {
@@ -228,7 +237,6 @@ public class UserCenterServiceImpl implements UserCenterService {
      * 格式化预约时间显示
      */
     private String formatAppointmentTime(LocalDateTime appointmentTime) {
-        LocalDateTime now = LocalDateTime.now();
         LocalDate today = LocalDate.now();
         LocalDate appointmentDate = appointmentTime.toLocalDate();
 

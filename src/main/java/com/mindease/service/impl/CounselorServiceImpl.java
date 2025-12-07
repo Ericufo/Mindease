@@ -52,8 +52,8 @@ public class CounselorServiceImpl implements CounselorService {
      * 智能推荐咨询师
      */
     @Override
-    public RecommendResultVO recommendCounselors(Long userId, String keyword, String filterSpecialty, String sort) {
-        log.info("智能推荐咨询师，用户ID:{}，关键词:{}，筛选领域:{}，排序:{}", userId, keyword, filterSpecialty, sort);
+    public RecommendResultVO recommendCounselors(Long userId, String keyword, String sort) {
+        log.info("智能推荐咨询师，用户ID:{}，关键词:{}，排序:{}", userId, keyword, sort);
 
         // 1. 获取用户上下文
         List<String> keywords = new ArrayList<>();
@@ -98,32 +98,33 @@ public class CounselorServiceImpl implements CounselorService {
                 }
                 userTags.add(resultLevel);
             }
-        } else if (!recentMoodLogs.isEmpty()) {
+        } else if (recentMoodLogs != null && !recentMoodLogs.isEmpty()) {
             strategy = "mood_based";
             basedOn = "近期情绪状态";
         }
 
         // 1.3 手动关键词优先级最高
         if (keyword != null && !keyword.trim().isEmpty()) {
+            String trimmedKeyword = keyword.trim();
             keywords.clear();
-            keywords.add(keyword);
+            keywords.add(trimmedKeyword);
             strategy = "keyword_search";
-            basedOn = "搜索关键词：" + keyword;
+            basedOn = "搜索关键词：" + trimmedKeyword;
         }
 
-        // 1.4 手动筛选领域
-        if (filterSpecialty != null && !filterSpecialty.trim().isEmpty()) {
-            if (!keywords.contains(filterSpecialty)) {
-                keywords.add(filterSpecialty);
-            }
-        }
+        // 1.4 生成关键词变体，提升模糊匹配（如“焦虑症”→“焦虑”）
+        keywords = expandKeywordVariants(keywords);
 
         // 2. 查询咨询师列表
         List<CounselorProfile> profiles;
-        if (keywords.isEmpty()) {
+        boolean hasKeyword = !keywords.isEmpty();
+        if (!hasKeyword) {
             profiles = counselorProfileMapper.getAllActiveCounselors();
         } else {
-            profiles = counselorProfileMapper.recommendCounselors(keywords, sort != null ? sort : "smart");
+            profiles = counselorProfileMapper.recommendCounselors(
+                    keywords,
+                    sort != null ? sort : "smart"
+            );
         }
 
         // 3. 构建推荐列表
@@ -171,6 +172,46 @@ public class CounselorServiceImpl implements CounselorService {
                 .recommendContext(context)
                 .counselors(counselors)
                 .build();
+    }
+
+    /**
+     * 为关键词生成变体，增强模糊匹配能力
+     * 规则：
+     * 1) 保留原词
+     * 2) 去除常见中文后缀（症/障碍/问题/情况/状态/情绪/病/感）
+     * 3) 去掉末尾一个字符（长度>2时），兜底提升部分匹配
+     */
+    private List<String> expandKeywordVariants(List<String> source) {
+        if (source == null || source.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> suffixes = Arrays.asList("症", "障碍", "问题", "情况", "状态", "情绪", "病", "感");
+        List<String> result = new ArrayList<>();
+        for (String kw : source) {
+            if (kw == null) continue;
+            String base = kw.trim();
+            if (base.isEmpty()) continue;
+            addIfAbsent(result, base);
+            for (String suffix : suffixes) {
+                if (base.endsWith(suffix) && base.length() > suffix.length() + 0) {
+                    String stripped = base.substring(0, base.length() - suffix.length());
+                    if (stripped.length() >= 2) {
+                        addIfAbsent(result, stripped);
+                    }
+                }
+            }
+            if (base.length() > 2) {
+                String shorter = base.substring(0, base.length() - 1);
+                addIfAbsent(result, shorter);
+            }
+        }
+        return result;
+    }
+
+    private void addIfAbsent(List<String> list, String value) {
+        if (!list.contains(value)) {
+            list.add(value);
+        }
     }
 
     /**
@@ -255,7 +296,7 @@ public class CounselorServiceImpl implements CounselorService {
 
         return ReviewListVO.builder()
                 .total(total)
-                .avgRating(avgRating != null ? BigDecimal.valueOf(avgRating).setScale(1, BigDecimal.ROUND_HALF_UP) : BigDecimal.ZERO)
+                .avgRating(avgRating != null ? BigDecimal.valueOf(avgRating).setScale(1, RoundingMode.HALF_UP) : BigDecimal.ZERO)
                 .reviews(reviewVOList)
                 .build();
     }

@@ -68,5 +68,18 @@ public class UserCenterController {
 
         return Result.success(OperationResultVO.builder().success(true).build());
     }
+
+    /**
+     * 将当前用户的通知全部标记为已读
+     *
+     * @param userId 当前用户ID（从token中获取）
+     * @return
+     */
+    @PutMapping("/notifications/read-all")
+    public Result<OperationResultVO> markAllNotificationsAsRead(@RequestAttribute Long userId) {
+        log.info("标记全部通知已读，用户ID:{}", userId);
+        userCenterService.markAllNotificationsAsRead(userId);
+        return Result.success(OperationResultVO.builder().success(true).build());
+    }
 }
 

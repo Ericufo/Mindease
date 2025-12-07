@@ -10,11 +10,10 @@ public interface CounselorService {
      *
      * @param userId 当前用户ID
      * @param keyword 搜索关键词
-     * @param filterSpecialty 筛选领域
      * @param sort 排序方式
      * @return
      */
-    RecommendResultVO recommendCounselors(Long userId, String keyword, String filterSpecialty, String sort);
+    RecommendResultVO recommendCounselors(Long userId, String keyword, String sort);
 
     /**
      * 检查推荐前置状态
