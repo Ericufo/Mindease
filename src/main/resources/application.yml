@@ -8,6 +8,10 @@ spring:
     url: jdbc:mysql://${spring.datasource.host}:${spring.datasource.port}/${spring.datasource.database}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=utf-8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true
     username: ${spring.datasource.username}
     password: ${spring.datasource.password}
+  data:
+    redis:
+      host: localhost
+      port: 6379
 
 server:
   port: 8080
@@ -22,4 +26,21 @@ mindease:
   jwt:
     secret-key: mindease-jwt-secret-key-2024-secure-key-for-hmac-sha256
     ttl: 7200000
+
+langchain4j:
+  community:
+    dashscope:
+      chat-model:
+        model-name: qwen-max
+        api-key: ${langchain4j.community.dashscope.chat-model.api-key}
+      streaming-chat-model:
+        model-name: qwen-max
+        api-key: ${langchain4j.community.dashscope.chat-model.api-key}
+      embedding-model:
+        model-name: text-embedding-v3
+        api-key: ${langchain4j.community.dashscope.chat-model.api-key}
+
+    redis:
+      host: localhost
+      port: 6379
 
