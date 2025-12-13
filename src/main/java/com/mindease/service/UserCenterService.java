@@ -29,5 +29,12 @@ public interface UserCenterService {
      * @param notificationId
      */
     void markNotificationAsRead(Long userId, Long notificationId);
+
+    /**
+     * 将当前用户的通知全部标记为已读
+     *
+     * @param userId
+     */
+    void markAllNotificationsAsRead(Long userId);
 }
 

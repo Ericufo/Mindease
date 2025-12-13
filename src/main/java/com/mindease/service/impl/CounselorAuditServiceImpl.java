@@ -21,6 +21,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -41,6 +44,8 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
 
     @Autowired
     private SysNotificationMapper notificationMapper;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * 提交资质审核
@@ -72,6 +77,9 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
                 .build();
 
         auditRecordMapper.insert(record);
+
+        // 4. 同步用户提交的资料到 counselor_profile，便于后续审核通过后直接展示
+        upsertCounselorProfile(userId, submitDTO);
 
         log.info("资质审核提交成功，审核ID:{}", record.getId());
 
@@ -218,6 +226,56 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
             existingProfile.setQualificationUrl(record.getQualificationUrl());
             counselorProfileMapper.update(existingProfile);
             log.info("更新咨询师资料成功，用户ID:{}", record.getUserId());
+        }
+    }
+
+    /**
+     * 将用户提交的资料写入 counselor_profile（草稿/预填充）
+     */
+    private void upsertCounselorProfile(Long userId, AuditSubmitDTO submitDTO) {
+        try {
+            String specialtyJson = null;
+            if (submitDTO.getSpecialty() != null) {
+                specialtyJson = objectMapper.writeValueAsString(submitDTO.getSpecialty());
+            }
+
+            CounselorProfile profile = counselorProfileMapper.getByUserId(userId);
+            boolean isNew = false;
+            if (profile == null) {
+                profile = CounselorProfile.builder()
+                        .userId(userId)
+                        .rating(BigDecimal.valueOf(5.0))
+                        .reviewCount(0)
+                        .build();
+                isNew = true;
+            }
+
+            profile.setRealName(submitDTO.getRealName());
+            profile.setTitle(submitDTO.getTitle());
+            profile.setExperienceYears(submitDTO.getExperienceYears());
+            profile.setSpecialty(specialtyJson);
+            profile.setBio(submitDTO.getBio());
+            profile.setQualificationUrl(submitDTO.getQualificationUrl());
+            profile.setLocation(submitDTO.getLocation());
+            profile.setPricePerHour(submitDTO.getPricePerHour());
+
+            if (profile.getRating() == null) {
+                profile.setRating(BigDecimal.valueOf(5.0));
+            }
+            if (profile.getReviewCount() == null) {
+                profile.setReviewCount(0);
+            }
+
+            if (isNew) {
+                counselorProfileMapper.insert(profile);
+                log.info("提交审核时创建咨询师资料草稿成功，用户ID:{}", userId);
+            } else {
+                counselorProfileMapper.update(profile);
+                log.info("提交审核时更新咨询师资料草稿成功，用户ID:{}", userId);
+            }
+        } catch (JsonProcessingException e) {
+            log.error("序列化咨询师专长失败", e);
+            throw new BaseException("专长格式错误，请检查后重试");
         }
     }
 

@@ -27,18 +27,16 @@ public class CounselorController {
      *
      * @param userId 当前用户ID（从token中获取）
      * @param keyword 搜索关键词（可选）
-     * @param filterSpecialty 筛选领域（可选）
      * @param sort 排序方式（可选）: smart, price_asc, rating_desc
      * @return
      */
     @GetMapping("/recommend")
     public Result<RecommendResultVO> recommendCounselors(@RequestAttribute Long userId,
                                                           @RequestParam(required = false) String keyword,
-                                                          @RequestParam(required = false) String filterSpecialty,
                                                           @RequestParam(required = false, defaultValue = "smart") String sort) {
-        log.info("推荐咨询师，用户ID:{}，关键词:{}，筛选:{}，排序:{}", userId, keyword, filterSpecialty, sort);
+        log.info("推荐咨询师，用户ID:{}，关键词:{}，排序:{}", userId, keyword, sort);
 
-        RecommendResultVO result = counselorService.recommendCounselors(userId, keyword, filterSpecialty, sort);
+        RecommendResultVO result = counselorService.recommendCounselors(userId, keyword, sort);
         return Result.success(result);
     }
 
