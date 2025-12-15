@@ -17,3 +17,6 @@
 
 # System message
 **/system.txt
+
+# Cors config
+src/main/java/com/mindease/config/WebCorsConfig.java
