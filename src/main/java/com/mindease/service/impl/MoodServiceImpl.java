@@ -58,7 +58,7 @@ public class MoodServiceImpl implements MoodService {
 
         // 调用AI服务获取情绪分析
         String aiAnalysis = getMoodAnalysis(moodPrompt, userId);
-        
+
         moodLog.setAiAnalysis(aiAnalysis);
         
         // 设置创建时间

@@ -49,14 +49,14 @@ public class AiConfiguration {
 //        return consultantService;
 //    }
 
-    // 会话记忆
-    @Bean
-    public ChatMemory chatMemory() {
-        MessageWindowChatMemory memory = MessageWindowChatMemory.builder()
-                .maxMessages(20)
-                .build();
-        return memory;
-    }
+//    // 会话记忆
+//    @Bean
+//    public ChatMemory chatMemory() {
+//        MessageWindowChatMemory memory = MessageWindowChatMemory.builder()
+//                .maxMessages(20)
+//                .build();
+//        return memory;
+//    }
 
     // chatMemoryProvider
     @Bean
