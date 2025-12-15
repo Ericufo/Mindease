@@ -123,5 +123,34 @@ public interface AppointmentMapper {
      */
     List<Appointment> getExpiredConfirmedAppointments(@Param("userId") Long userId, 
                                                        @Param("currentTime") LocalDateTime currentTime);
+
+    /**
+     * 查询用户历史预约过的咨询师ID列表（已完成的预约）
+     *
+     * @param userId
+     * @return
+     */
+    @Select("select distinct counselor_id from appointment where user_id = #{userId} and status = 'COMPLETED' order by update_time desc limit 10")
+    List<Long> getHistoryCounselorIds(Long userId);
+
+    /**
+     * 查询用户预约次数最多的咨询师ID（协同过滤用）
+     *
+     * @param userId
+     * @param limit
+     * @return
+     */
+    @Select("select counselor_id from appointment where user_id = #{userId} and status = 'COMPLETED' " +
+            "group by counselor_id order by count(*) desc limit #{limit}")
+    List<Long> getTopCounselorIdsByUser(@Param("userId") Long userId, @Param("limit") Integer limit);
+
+    /**
+     * 统计用户完成预约的总数
+     *
+     * @param userId
+     * @return
+     */
+    @Select("select count(*) from appointment where user_id = #{userId} and status = 'COMPLETED'")
+    int countCompletedByUserId(Long userId);
 }
 

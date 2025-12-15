@@ -15,10 +15,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,14 +49,50 @@ public class CounselorServiceImpl implements CounselorService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // 测评量表到关键词的映射
+    private static final Map<String, List<String>> ASSESSMENT_KEYWORD_MAP = new HashMap<String, List<String>>() {{
+        put("焦虑", Arrays.asList("焦虑", "紧张", "担忧", "恐慌"));
+        put("抑郁", Arrays.asList("抑郁", "情绪低落", "悲伤", "失落"));
+        put("失眠", Arrays.asList("失眠", "睡眠", "入睡困难", "睡眠障碍"));
+        put("压力", Arrays.asList("压力", "疲惫", "倦怠", "应激"));
+        put("强迫", Arrays.asList("强迫", "反复", "重复行为"));
+        put("恐惧", Arrays.asList("恐惧", "害怕", "回避"));
+    }};
+
+    // 情绪类型到关键词映射（支持中英文）
+    private static final Map<String, List<String>> MOOD_TYPE_KEYWORD_MAP = new HashMap<String, List<String>>() {{
+        put("Anxious", Arrays.asList("焦虑", "紧张"));
+        put("焦虑", Arrays.asList("焦虑", "紧张"));
+        put("Depressed", Arrays.asList("抑郁", "情绪低落"));
+        put("抑郁", Arrays.asList("抑郁", "情绪低落"));
+        put("Stressed", Arrays.asList("压力", "疲惫"));
+        put("压力", Arrays.asList("压力", "疲惫"));
+        put("Sad", Arrays.asList("悲伤", "失落"));
+        put("悲伤", Arrays.asList("悲伤", "失落"));
+        put("Angry", Arrays.asList("愤怒", "情绪管理"));
+        put("愤怒", Arrays.asList("愤怒", "情绪管理"));
+        put("Lonely", Arrays.asList("孤独", "社交"));
+        put("孤独", Arrays.asList("孤独", "社交"));
+        put("Happy", Arrays.asList("积极", "正向"));
+        put("开心", Arrays.asList("积极", "正向"));
+    }};
+
+    // 中文地名列表（问题7改进）
+    private static final Set<String> CHINESE_CITIES = new HashSet<>(Arrays.asList(
+        "北京", "上海", "广州", "深圳", "天津", "重庆", "成都", "杭州", "武汉", "西安",
+        "南京", "郑州", "长沙", "沈阳", "青岛", "大连", "宁波", "厦门", "济南", "哈尔滨",
+        "苏州", "无锡", "福州", "石家庄", "昆明", "兰州", "太原", "合肥", "南昌", "贵阳",
+        "南宁", "海口", "银川", "西宁", "呼和浩特", "乌鲁木齐", "拉萨", "线上", "在线"
+    ));
+
     /**
-     * 智能推荐咨询师
+     * 智能推荐咨询师（增强版）
      */
     @Override
     public RecommendResultVO recommendCounselors(Long userId, String keyword, String sort) {
         log.info("智能推荐咨询师，用户ID:{}，关键词:{}，排序:{}", userId, keyword, sort);
 
-        // 1. 获取用户上下文
+        // 1. 获取用户画像数据
         List<String> keywords = new ArrayList<>();
         String strategy = "hot_list";
         String basedOn = "热门咨询师列表";
@@ -66,16 +103,52 @@ public class CounselorServiceImpl implements CounselorService {
         List<MoodLog> recentMoodLogs = moodLogMapper.getRecentMoodLogs(userId, sevenDaysAgo);
 
         boolean isUrgent = false;
+        
         if (recentMoodLogs != null && !recentMoodLogs.isEmpty()) {
+            log.info("用户{}最近7天有{}条情绪日志", userId, recentMoodLogs.size());
+            
             double avgScore = recentMoodLogs.stream()
                     .mapToInt(MoodLog::getMoodScore)
                     .average()
                     .orElse(10.0);
 
+            log.info("用户{}情绪平均分: {}", userId, avgScore);
+            
             if (avgScore < 4) {
                 isUrgent = true;
                 userTags.add("紧急");
             }
+            
+            Map<String, Long> moodTypeCounts = recentMoodLogs.stream()
+                    .collect(Collectors.groupingBy(MoodLog::getMoodType, Collectors.counting()));
+            
+            log.info("用户{}情绪类型分布: {}", userId, moodTypeCounts);
+            
+            for (Map.Entry<String, Long> entry : moodTypeCounts.entrySet()) {
+                // 降低阈值：出现1次以上就提取关键词
+                if (entry.getValue() >= 1) {
+                    List<String> moodKeywords = MOOD_TYPE_KEYWORD_MAP.get(entry.getKey());
+                    if (moodKeywords != null) {
+                        keywords.addAll(moodKeywords);
+                        log.info("从情绪类型 {} 提取关键词: {}", entry.getKey(), moodKeywords);
+                    } else {
+                        log.warn("情绪类型 {} 未在映射表中找到，请检查数据库mood_type字段值", entry.getKey());
+                    }
+                }
+            }
+            
+            if (!keywords.isEmpty()) {
+                strategy = "mood_based";
+                basedOn = "近期情绪状态分析";
+                log.info("基于情绪分析提取关键词: {}", keywords);
+            } else {
+                // 即使没有提取到关键词，也标记为情绪驱动
+                strategy = "mood_based";
+                basedOn = "近期情绪状态";
+                log.info("有情绪数据但未提取到关键词，使用热门推荐");
+            }
+        } else {
+            log.info("用户{}最近7天无情绪日志", userId);
         }
 
         // 1.2 查询用户最近的测评记录
@@ -84,23 +157,13 @@ public class CounselorServiceImpl implements CounselorService {
             strategy = "assessment_based";
             basedOn = latestAssessment.getScaleKey() + " " + latestAssessment.getResultLevel();
 
-            // 提取关键词
             String resultLevel = latestAssessment.getResultLevel();
             if (resultLevel != null) {
-                if (resultLevel.contains("焦虑")) {
-                    keywords.add("焦虑");
-                }
-                if (resultLevel.contains("抑郁")) {
-                    keywords.add("抑郁");
-                }
-                if (resultLevel.contains("失眠") || resultLevel.contains("睡眠")) {
-                    keywords.add("失眠");
-                }
+                List<String> extractedKeywords = extractKeywordsFromText(resultLevel);
+                keywords.addAll(extractedKeywords);
                 userTags.add(resultLevel);
+                log.info("从测评结果提取关键词: {}", extractedKeywords);
             }
-        } else if (recentMoodLogs != null && !recentMoodLogs.isEmpty()) {
-            strategy = "mood_based";
-            basedOn = "近期情绪状态";
         }
 
         // 1.3 手动关键词优先级最高
@@ -112,8 +175,21 @@ public class CounselorServiceImpl implements CounselorService {
             basedOn = "搜索关键词：" + trimmedKeyword;
         }
 
-        // 1.4 生成关键词变体，提升模糊匹配（如“焦虑症”→“焦虑”）
-        keywords = expandKeywordVariants(keywords);
+        // 1.4 生成关键词变体，提升模糊匹配（问题7：优化避免过度裁剪）
+        keywords = expandKeywordVariantsOptimized(keywords);
+        log.info("扩展后关键词: {}", keywords);
+
+        // 【改进3】协同过滤：查询用户历史预约的咨询师
+        List<Long> historyCounselorIds = new ArrayList<>();
+        int completedCount = appointmentMapper.countCompletedByUserId(userId);
+        if (completedCount > 0) {
+            historyCounselorIds = appointmentMapper.getTopCounselorIdsByUser(userId, 3);
+            log.info("用户历史预约咨询师: {}, 完成预约数: {}", historyCounselorIds, completedCount);
+        }
+
+        // 【改进9】个性化权重：根据用户预约历史判断消费偏好
+        UserPreference userPreference = analyzeUserPreference(userId, completedCount);
+        log.info("用户偏好分析: {}", userPreference);
 
         // 2. 查询咨询师列表
         List<CounselorProfile> profiles;
@@ -127,23 +203,40 @@ public class CounselorServiceImpl implements CounselorService {
             );
         }
 
+        // 【改进3】协同过滤增强：加入相似咨询师
+        if (!historyCounselorIds.isEmpty() && profiles.size() < 10) {
+            List<CounselorProfile> similarProfiles = counselorProfileMapper.getByCounselorIds(historyCounselorIds);
+            // 去重后添加
+            for (CounselorProfile sp : similarProfiles) {
+                if (profiles.stream().noneMatch(p -> p.getUserId().equals(sp.getUserId()))) {
+                    profiles.add(sp);
+                    if (profiles.size() >= 10) break;
+                }
+            }
+            log.info("协同过滤增强后咨询师数量: {}", profiles.size());
+        }
+
+        // 【改进9】根据用户偏好调整排序权重
+        if (userPreference != null && "smart".equals(sort)) {
+            profiles = applyPersonalizedWeight(profiles, userPreference);
+        }
+
+        // 【改进6】多样性控制：前5个按匹配度，后5个按多样性
+        profiles = applyDiversityControl(profiles);
+
         // 3. 构建推荐列表
-        // 为了在 lambda 中使用，创建 final 副本
         final List<String> finalKeywords = keywords;
         final boolean finalIsUrgent = isUrgent;
+        final List<Long> finalHistoryIds = historyCounselorIds;
         
         List<CounselorRecommendVO> counselors = profiles.stream().map(profile -> {
-            // 获取用户头像
             User user = userMapper.getById(profile.getUserId());
-
-            // 解析 specialty JSON
             List<String> specialtyList = parseJsonArray(profile.getSpecialty());
 
-            // 生成匹配理由
-            String matchReason = generateMatchReason(profile, finalKeywords, finalIsUrgent);
+            String matchReason = generateMatchReason(profile, finalKeywords, finalIsUrgent, finalHistoryIds);
 
-            // 生成标签
-            List<String> tags = generateTags(profile, finalIsUrgent);
+            // 【改进5】真实检查"今日可约"标签
+            List<String> tags = generateTagsWithRealAvailability(profile, finalIsUrgent);
 
             return CounselorRecommendVO.builder()
                     .id(profile.getUserId())
@@ -155,7 +248,7 @@ public class CounselorServiceImpl implements CounselorService {
                     .rating(profile.getRating())
                     .pricePerHour(profile.getPricePerHour())
                     .location(profile.getLocation())
-                    .nextAvailableTime(null) // 下一个可用时段（需前端调用可用时段接口获取）
+                    .nextAvailableTime(null)
                     .matchReason(matchReason)
                     .tags(tags)
                     .build();
@@ -175,32 +268,77 @@ public class CounselorServiceImpl implements CounselorService {
     }
 
     /**
-     * 为关键词生成变体，增强模糊匹配能力
-     * 规则：
-     * 1) 保留原词
-     * 2) 去除常见中文后缀（症/障碍/问题/情况/状态/情绪/病/感）
-     * 3) 去掉末尾一个字符（长度>2时），兜底提升部分匹配
+     * 【改进1】从文本中提取关键词（基于规则+NLP思想）
      */
-    private List<String> expandKeywordVariants(List<String> source) {
+    private List<String> extractKeywordsFromText(String text) {
+        List<String> keywords = new ArrayList<>();
+        if (text == null || text.trim().isEmpty()) {
+            return keywords;
+        }
+
+        // 遍历映射表，查找匹配的关键词
+        for (Map.Entry<String, List<String>> entry : ASSESSMENT_KEYWORD_MAP.entrySet()) {
+            if (text.contains(entry.getKey())) {
+                keywords.addAll(entry.getValue());
+            }
+        }
+
+        // 使用正则提取中文关键词（2-4个字）
+        Pattern pattern = Pattern.compile("[\\u4e00-\\u9fa5]{2,4}");
+        Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            String word = matcher.group();
+            // 过滤掉常见的无意义词
+            if (!isStopWord(word)) {
+                addIfAbsent(keywords, word);
+            }
+        }
+
+        return keywords.stream().distinct().collect(Collectors.toList());
+    }
+
+    /**
+     * 判断是否为停用词
+     */
+    private boolean isStopWord(String word) {
+        Set<String> stopWords = new HashSet<>(Arrays.asList(
+            "的", "是", "在", "有", "和", "了", "不", "与", "中", "为", "对", "及", 
+            "个", "等", "但", "或", "从", "到", "而", "由", "也", "很", "就", "可能",
+            "轻度", "中度", "重度", "严重", "明显", "症状", "状态", "情况", "程度"
+        ));
+        return stopWords.contains(word);
+    }
+
+    /**
+     * 【改进7】优化的关键词扩展：避免过度裁剪地名等
+     */
+    private List<String> expandKeywordVariantsOptimized(List<String> source) {
         if (source == null || source.isEmpty()) {
             return new ArrayList<>();
         }
         List<String> suffixes = Arrays.asList("症", "障碍", "问题", "情况", "状态", "情绪", "病", "感");
         List<String> result = new ArrayList<>();
+        
         for (String kw : source) {
             if (kw == null) continue;
             String base = kw.trim();
             if (base.isEmpty()) continue;
+            
+            // 总是保留原词
             addIfAbsent(result, base);
+            
+            // 去后缀变体
             for (String suffix : suffixes) {
-                if (base.endsWith(suffix) && base.length() > suffix.length() + 0) {
+                if (base.endsWith(suffix) && base.length() > suffix.length()) {
                     String stripped = base.substring(0, base.length() - suffix.length());
                     if (stripped.length() >= 2) {
                         addIfAbsent(result, stripped);
                     }
                 }
             }
-            if (base.length() > 2) {
+            
+            // 【改进7】只对非地名且长度>3的词进行末尾裁剪
+            if (base.length() > 3 && !isLocationName(base)) {
                 String shorter = base.substring(0, base.length() - 1);
                 addIfAbsent(result, shorter);
             }
@@ -208,10 +346,243 @@ public class CounselorServiceImpl implements CounselorService {
         return result;
     }
 
+    /**
+     * 判断是否为地名
+     */
+    private boolean isLocationName(String word) {
+        return CHINESE_CITIES.contains(word) || CHINESE_CITIES.stream().anyMatch(word::contains);
+    }
+
     private void addIfAbsent(List<String> list, String value) {
         if (!list.contains(value)) {
             list.add(value);
         }
+    }
+
+    /**
+     * 【改进9】分析用户偏好
+     */
+    private UserPreference analyzeUserPreference(Long userId, int completedCount) {
+        if (completedCount == 0) {
+            return new UserPreference("balanced", 0);
+        }
+
+        // 查询用户历史预约的咨询师，分析价格偏好
+        List<Long> topCounselorIds = appointmentMapper.getTopCounselorIdsByUser(userId, 5);
+        if (topCounselorIds.isEmpty()) {
+            return new UserPreference("balanced", completedCount);
+        }
+
+        List<CounselorProfile> historyCounselors = counselorProfileMapper.getByCounselorIds(topCounselorIds);
+        if (historyCounselors.isEmpty()) {
+            return new UserPreference("balanced", completedCount);
+        }
+
+        // 计算平均价格和评分偏好
+        double avgPrice = historyCounselors.stream()
+                .filter(c -> c.getPricePerHour() != null)
+                .mapToDouble(c -> c.getPricePerHour().doubleValue())
+                .average()
+                .orElse(300.0);
+
+        double avgRating = historyCounselors.stream()
+                .filter(c -> c.getRating() != null)
+                .mapToDouble(c -> c.getRating().doubleValue())
+                .average()
+                .orElse(4.5);
+
+        String preferenceType;
+        if (avgPrice < 250) {
+            preferenceType = "price_sensitive";
+        } else if (avgRating >= 4.8) {
+            preferenceType = "quality_first";
+        } else {
+            preferenceType = "balanced";
+        }
+
+        return new UserPreference(preferenceType, completedCount);
+    }
+
+    /**
+     * 用户偏好内部类
+     */
+    private static class UserPreference {
+        String type; // price_sensitive, quality_first, balanced
+        int experienceLevel; // 预约次数
+
+        UserPreference(String type, int experienceLevel) {
+            this.type = type;
+            this.experienceLevel = experienceLevel;
+        }
+
+        @Override
+        public String toString() {
+            return "UserPreference{type='" + type + "', experienceLevel=" + experienceLevel + "}";
+        }
+    }
+
+    /**
+     * 【改进9】应用个性化权重
+     */
+    private List<CounselorProfile> applyPersonalizedWeight(List<CounselorProfile> profiles, UserPreference preference) {
+        if (preference == null || "balanced".equals(preference.type)) {
+            return profiles;
+        }
+
+        return profiles.stream()
+                .sorted((p1, p2) -> {
+                    double score1 = calculatePersonalizedScore(p1, preference);
+                    double score2 = calculatePersonalizedScore(p2, preference);
+                    return Double.compare(score2, score1);
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 计算个性化得分
+     */
+    private double calculatePersonalizedScore(CounselorProfile profile, UserPreference preference) {
+        double score = 0;
+
+        // 基础评分权重
+        if (profile.getRating() != null) {
+            score += profile.getRating().doubleValue() * 20;
+        }
+
+        // 根据用户偏好调整
+        if ("price_sensitive".equals(preference.type)) {
+            // 价格敏感：价格越低分越高
+            if (profile.getPricePerHour() != null) {
+                score += Math.max(0, (500 - profile.getPricePerHour().doubleValue()) / 10);
+            }
+        } else if ("quality_first".equals(preference.type)) {
+            // 质量优先：评分和评价数越高分越高
+            if (profile.getReviewCount() != null) {
+                score += Math.min(50, profile.getReviewCount() / 2.0);
+            }
+        }
+
+        return score;
+    }
+
+    /**
+     * 【改进6】多样性控制（MMR算法简化版）
+     */
+    private List<CounselorProfile> applyDiversityControl(List<CounselorProfile> profiles) {
+        if (profiles.size() <= 5) {
+            return profiles;
+        }
+
+        List<CounselorProfile> result = new ArrayList<>();
+        
+        // 前5个保持原顺序（高匹配度）
+        result.addAll(profiles.subList(0, Math.min(5, profiles.size())));
+
+        // 后续从剩余中选择多样性高的
+        List<CounselorProfile> remaining = new ArrayList<>(profiles.subList(5, profiles.size()));
+        
+        while (result.size() < 10 && !remaining.isEmpty()) {
+            CounselorProfile mostDiverse = findMostDiverse(result, remaining);
+            if (mostDiverse != null) {
+                result.add(mostDiverse);
+                remaining.remove(mostDiverse);
+            } else {
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 找到最多样化的咨询师
+     */
+    private CounselorProfile findMostDiverse(List<CounselorProfile> selected, List<CounselorProfile> candidates) {
+        CounselorProfile mostDiverse = null;
+        double maxDiversity = -1;
+
+        for (CounselorProfile candidate : candidates) {
+            double diversity = calculateDiversity(candidate, selected);
+            if (diversity > maxDiversity) {
+                maxDiversity = diversity;
+                mostDiverse = candidate;
+            }
+        }
+
+        return mostDiverse;
+    }
+
+    /**
+     * 计算多样性得分
+     */
+    private double calculateDiversity(CounselorProfile candidate, List<CounselorProfile> selected) {
+        double diversityScore = 0;
+
+        List<String> candidateSpecialty = parseJsonArray(candidate.getSpecialty());
+        
+        for (CounselorProfile s : selected) {
+            List<String> selectedSpecialty = parseJsonArray(s.getSpecialty());
+            
+            // 专长重叠度
+            long overlap = candidateSpecialty.stream()
+                    .filter(selectedSpecialty::contains)
+                    .count();
+            
+            // 重叠越少，多样性越高
+            diversityScore += (candidateSpecialty.size() - overlap);
+            
+            // 价格差异
+            if (candidate.getPricePerHour() != null && s.getPricePerHour() != null) {
+                double priceDiff = Math.abs(candidate.getPricePerHour().doubleValue() - 
+                                           s.getPricePerHour().doubleValue());
+                diversityScore += priceDiff / 100;
+            }
+            
+            // 地区差异
+            if (candidate.getLocation() != null && s.getLocation() != null && 
+                !candidate.getLocation().equals(s.getLocation())) {
+                diversityScore += 10;
+            }
+        }
+
+        return diversityScore;
+    }
+
+    /**
+     * 【改进5】生成带真实可用性检查的标签
+     */
+    private List<String> generateTagsWithRealAvailability(CounselorProfile profile, boolean isUrgent) {
+        List<String> tags = new ArrayList<>();
+
+        if (profile.getPricePerHour() != null && profile.getPricePerHour().compareTo(BigDecimal.valueOf(300)) < 0) {
+            tags.add("价格亲民");
+        }
+
+        if (profile.getRating() != null && profile.getRating().compareTo(BigDecimal.valueOf(4.8)) >= 0) {
+            tags.add("高评分");
+        }
+
+        if (profile.getReviewCount() != null && profile.getReviewCount() > 50) {
+            tags.add("经验丰富");
+        }
+
+        // 【改进5】真实检查今日是否可约
+        if (isUrgent) {
+            try {
+                LocalDate today = LocalDate.now();
+                AvailableSlotsVO slots = appointmentService.getAvailableSlots(
+                    profile.getUserId(), 
+                    today.toString()
+                );
+                if (slots != null && slots.getSlots() != null && !slots.getSlots().isEmpty()) {
+                    tags.add("今日可约");
+                }
+            } catch (Exception e) {
+                log.warn("检查咨询师{}今日可约状态失败: {}", profile.getUserId(), e.getMessage());
+            }
+        }
+
+        return tags;
     }
 
     /**
@@ -251,7 +622,6 @@ public class CounselorServiceImpl implements CounselorService {
         User user = userMapper.getById(counselorId);
         List<String> specialtyList = parseJsonArray(profile.getSpecialty());
 
-        // 提取评价中的高频词作为标签
         List<String> tags = extractTagsFromReviews(counselorId);
 
         return CounselorDetailVO.builder()
@@ -307,10 +677,8 @@ public class CounselorServiceImpl implements CounselorService {
     @Override
     @Transactional
     public Long submitReview(Long userId, ReviewSubmitDTO reviewSubmitDTO) {
-        // 在提交评价前，先自动更新该用户的已过期预约状态
         appointmentService.autoCompleteExpiredAppointments(userId);
 
-        // 验证预约订单是否存在且已完成
         Appointment appointment = appointmentMapper.getById(reviewSubmitDTO.getAppointmentId());
         if (appointment == null) {
             throw new BaseException("预约订单不存在");
@@ -324,13 +692,11 @@ public class CounselorServiceImpl implements CounselorService {
             throw new BaseException("只能评价已完成的预约");
         }
 
-        // 检查是否已经评价过
         int existingReviewCount = counselorReviewMapper.countByAppointmentId(reviewSubmitDTO.getAppointmentId());
         if (existingReviewCount > 0) {
             throw new BaseException("该预约已经评价过了");
         }
 
-        // 从预约订单中获取counselorId
         Long counselorId = appointment.getCounselorId();
 
         CounselorReview review = CounselorReview.builder()
@@ -344,7 +710,6 @@ public class CounselorServiceImpl implements CounselorService {
 
         counselorReviewMapper.insert(review);
 
-        // 更新咨询师的评分统计
         updateCounselorRating(counselorId);
 
         return review.getId();
@@ -354,24 +719,20 @@ public class CounselorServiceImpl implements CounselorService {
      * 更新咨询师评分统计
      */
     private void updateCounselorRating(Long counselorId) {
-        // 查询该咨询师的所有评价
         List<CounselorReview> reviews = counselorReviewMapper.listByCounselorId(counselorId);
         
         if (reviews.isEmpty()) {
             return;
         }
 
-        // 计算平均评分
         double avgRating = reviews.stream()
                 .mapToInt(CounselorReview::getRating)
                 .average()
                 .orElse(5.0);
 
-        // 保留一位小数
         BigDecimal rating = BigDecimal.valueOf(avgRating)
                 .setScale(1, RoundingMode.HALF_UP);
 
-        // 更新咨询师资料
         CounselorProfile profile = counselorProfileMapper.getByUserId(counselorId);
         if (profile != null) {
             profile.setRating(rating);
@@ -390,7 +751,6 @@ public class CounselorServiceImpl implements CounselorService {
             return Arrays.asList("暂无评价");
         }
 
-        // 统计高频词（简化版本，使用预定义标签匹配）
         List<String> predefinedTags = Arrays.asList(
             "专业", "耐心", "温和", "负责", "细心", "热情", "友善", 
             "经验丰富", "善于倾听", "有帮助", "靠谱", "值得信赖"
@@ -411,7 +771,6 @@ public class CounselorServiceImpl implements CounselorService {
             }
         }
 
-        // 如果没有匹配的标签，返回默认标签
         if (matchedTags.isEmpty()) {
             matchedTags.add("专业咨询师");
         }
@@ -435,9 +794,15 @@ public class CounselorServiceImpl implements CounselorService {
     }
 
     /**
-     * 生成匹配理由
+     * 生成匹配理由（增强版，包含协同过滤提示）
      */
-    private String generateMatchReason(CounselorProfile profile, List<String> keywords, boolean isUrgent) {
+    private String generateMatchReason(CounselorProfile profile, List<String> keywords, 
+                                      boolean isUrgent, List<Long> historyIds) {
+        // 【改进3】优先提示历史预约关系
+        if (historyIds.contains(profile.getUserId())) {
+            return "您曾预约过该咨询师，口碑良好。";
+        }
+
         if (keywords.isEmpty()) {
             return "经验丰富，评价良好。";
         }
@@ -448,35 +813,15 @@ public class CounselorServiceImpl implements CounselorService {
                 .count();
 
         if (matchCount > 0) {
-            return String.format("擅长处理%s问题，有%d年经验。", String.join("、", keywords), profile.getExperienceYears() != null ? profile.getExperienceYears() : 0);
+            String keywordsStr = keywords.stream()
+                    .filter(specialtyList::contains)
+                    .limit(2)
+                    .collect(Collectors.joining("、"));
+            return String.format("擅长处理%s问题，有%d年经验。", 
+                keywordsStr, 
+                profile.getExperienceYears() != null ? profile.getExperienceYears() : 0);
         }
 
         return "综合评分高，服务专业。";
     }
-
-    /**
-     * 生成标签
-     */
-    private List<String> generateTags(CounselorProfile profile, boolean isUrgent) {
-        List<String> tags = new ArrayList<>();
-
-        if (profile.getPricePerHour() != null && profile.getPricePerHour().compareTo(BigDecimal.valueOf(300)) < 0) {
-            tags.add("价格亲民");
-        }
-
-        if (profile.getRating() != null && profile.getRating().compareTo(BigDecimal.valueOf(4.8)) >= 0) {
-            tags.add("高评分");
-        }
-
-        if (profile.getReviewCount() != null && profile.getReviewCount() > 50) {
-            tags.add("经验丰富");
-        }
-
-        if (isUrgent) {
-            tags.add("今日可约");
-        }
-
-        return tags;
-    }
 }
-

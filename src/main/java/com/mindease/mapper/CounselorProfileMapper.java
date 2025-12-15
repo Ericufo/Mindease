@@ -65,5 +65,13 @@ public interface CounselorProfileMapper {
             "price_per_hour = #{pricePerHour}, rating = #{rating}, review_count = #{reviewCount} " +
             "where user_id = #{userId}")
     void update(CounselorProfile profile);
+
+    /**
+     * 根据咨询师ID列表批量查询咨询师资料（协同过滤用）
+     *
+     * @param counselorIds
+     * @return
+     */
+    List<CounselorProfile> getByCounselorIds(@Param("counselorIds") List<Long> counselorIds);
 }
 
