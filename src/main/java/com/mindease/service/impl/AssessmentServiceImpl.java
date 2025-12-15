@@ -337,9 +337,39 @@ public class AssessmentServiceImpl implements AssessmentService {
             // 检查scaleKey是否已存在
             AssessmentScale existScale = assessmentScaleMapper.getByScaleKey(scaleSaveDTO.getScaleKey());
             if (existScale != null) {
-                throw new BaseException("量表Key已存在");
+                // 检查 title 和 description 是否相同
+                boolean titleSame = (existScale.getTitle() == null && scaleSaveDTO.getTitle() == null) ||
+                                   (existScale.getTitle() != null && existScale.getTitle().equals(scaleSaveDTO.getTitle()));
+                boolean descSame = (existScale.getDescription() == null && scaleSaveDTO.getDescription() == null) ||
+                                  (existScale.getDescription() != null && existScale.getDescription().equals(scaleSaveDTO.getDescription()));
+                
+                if (titleSame && descSame) {
+                    // 完全相同，返回已存在的记录
+                    log.info("量表已存在且内容相同，scaleKey: {}, 返回已存在记录", scaleSaveDTO.getScaleKey());
+                    return ScaleSaveVO.builder()
+                            .scaleId(existScale.getId())
+                            .isUpdate(false)
+                            .build();
+                } else {
+                    // title 或 description 不同，更新记录
+                    existScale.setTitle(scaleSaveDTO.getTitle());
+                    existScale.setCoverUrl(scaleSaveDTO.getCoverUrl());
+                    existScale.setDescription(scaleSaveDTO.getDescription());
+                    existScale.setStatus(scaleSaveDTO.getStatus() != null ? scaleSaveDTO.getStatus() : existScale.getStatus());
+                    existScale.setScoringRules(scoringRulesJson);
+                    
+                    assessmentScaleMapper.update(existScale);
+                    
+                    log.info("量表已存在但内容不同，已更新，ID: {}, scaleKey: {}", existScale.getId(), existScale.getScaleKey());
+                    
+                    return ScaleSaveVO.builder()
+                            .scaleId(existScale.getId())
+                            .isUpdate(true)
+                            .build();
+                }
             }
 
+            // scaleKey 不存在，创建新记录
             AssessmentScale scale = AssessmentScale.builder()
                     .scaleKey(scaleSaveDTO.getScaleKey())
                     .title(scaleSaveDTO.getTitle())
@@ -362,6 +392,7 @@ public class AssessmentServiceImpl implements AssessmentService {
 
     /**
      * 管理量表题目（管理员）
+     * 逻辑：先删除该量表的所有题目，再批量插入新的题目列表
      *
      * @param questionManageDTO
      * @return
@@ -371,68 +402,35 @@ public class AssessmentServiceImpl implements AssessmentService {
     public QuestionManageVO manageQuestions(QuestionManageDTO questionManageDTO) {
         String scaleKey = questionManageDTO.getScaleKey();
 
-        // 检查量表是否存在
+        // 1. 检查量表是否存在
         AssessmentScale scale = assessmentScaleMapper.getByScaleKey(scaleKey);
         if (scale == null) {
             throw new BaseException("量表不存在");
         }
 
+        // 2. 先删除该量表的所有题目
+        assessmentQuestionMapper.deleteByScaleKey(scaleKey);
+        log.info("已删除量表 {} 的所有题目", scaleKey);
+
+        // 3. 批量插入新的题目列表
         int count = 0;
-
         for (QuestionManageDTO.QuestionItem questionItem : questionManageDTO.getQuestions()) {
-            // 判断是否为删除操作
-            if (Boolean.TRUE.equals(questionItem.getDeleted())) {
-                // 删除题目
-                if (questionItem.getId() != null) {
-                    // 先删除该题目的所有答案记录
-                    // 注意：这里需要谨慎处理，如果有历史测评记录引用了这个题目，可能需要保留
-                    // 目前只删除题目本身
-                    assessmentQuestionMapper.delete(questionItem.getId());
-                    count++;
-                    log.info("删除题目，ID: {}", questionItem.getId());
-                }
-                continue;
-            }
-
-            // 新增或更新操作
+            // 忽略 deleted 标记和 id，全部当作新题目插入
             String optionsJson = toJson(questionItem.getOptions());
 
-            if (questionItem.getId() != null) {
-                // 更新题目
-                AssessmentQuestion question = assessmentQuestionMapper.getById(questionItem.getId());
-                if (question != null) {
-                    question.setQuestionText(questionItem.getQuestionText());
-                    question.setOptions(optionsJson);
-                    question.setSortOrder(questionItem.getSortOrder());
+            AssessmentQuestion question = AssessmentQuestion.builder()
+                    .scaleKey(scaleKey)
+                    .questionText(questionItem.getQuestionText())
+                    .options(optionsJson)
+                    .sortOrder(questionItem.getSortOrder())
+                    .build();
 
-                    assessmentQuestionMapper.update(question);
-                    count++;
-                    log.info("更新题目，ID: {}", questionItem.getId());
-                }
-            } else {
-                // 新增题目（需要检查是否重复）
-                // 通过题目内容判断是否重复
-                List<AssessmentQuestion> existingQuestions = assessmentQuestionMapper.listByScaleKey(scaleKey);
-                boolean isDuplicate = existingQuestions.stream()
-                        .anyMatch(q -> q.getQuestionText().equals(questionItem.getQuestionText()));
-
-                if (isDuplicate) {
-                    log.warn("题目内容重复，跳过插入: {}", questionItem.getQuestionText());
-                    continue;
-                }
-
-                AssessmentQuestion question = AssessmentQuestion.builder()
-                        .scaleKey(scaleKey)
-                        .questionText(questionItem.getQuestionText())
-                        .options(optionsJson)
-                        .sortOrder(questionItem.getSortOrder())
-                        .build();
-
-                assessmentQuestionMapper.insert(question);
-                count++;
-                log.info("新增题目，内容: {}", questionItem.getQuestionText());
-            }
+            assessmentQuestionMapper.insert(question);
+            count++;
+            log.info("插入题目 {}/{}: {}", count, questionManageDTO.getQuestions().size(), questionItem.getQuestionText());
         }
+
+        log.info("量表 {} 题目重建完成，共插入 {} 道题目", scaleKey, count);
 
         return QuestionManageVO.builder()
                 .success(true)
