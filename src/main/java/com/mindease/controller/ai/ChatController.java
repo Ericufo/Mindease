@@ -6,6 +6,7 @@ import com.mindease.pojo.vo.ChatHistoryVO;
 import com.mindease.pojo.vo.ChatSessionCreateVO;
 import com.mindease.pojo.vo.ChatSessionListVO;
 import com.mindease.pojo.vo.ChatDeleteVO;
+import com.mindease.pojo.vo.SensitiveWordCheckVO;
 import com.mindease.service.ChatService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,5 +80,16 @@ public class ChatController {
         log.info("删除会话，会话ID: {}, 用户ID: {}", sessionId, userId);
         ChatDeleteVO chatDeleteVO = chatService.deleteSession(sessionId, userId);
         return Result.success(chatDeleteVO);
+    }
+    
+    @PostMapping("/check-sensitive-words")
+    public Result<SensitiveWordCheckVO> checkSensitiveWords(@RequestBody ChatMessageSendDTO chatMessageSendDTO,
+                                                          HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        log.info("当前用户ID: {}", userId);
+        
+        log.info("检测敏感词，用户ID: {}, 内容: {}", userId, chatMessageSendDTO.getContent());
+        SensitiveWordCheckVO result = chatService.checkSensitiveWords(chatMessageSendDTO.getContent());
+        return Result.success(result);
     }
 }

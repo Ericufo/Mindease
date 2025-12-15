@@ -5,6 +5,7 @@ import com.mindease.pojo.vo.ChatHistoryVO;
 import com.mindease.pojo.vo.ChatSessionCreateVO;
 import com.mindease.pojo.vo.ChatSessionListVO;
 import com.mindease.pojo.vo.ChatDeleteVO;
+import com.mindease.pojo.vo.SensitiveWordCheckVO;
 import reactor.core.publisher.Flux;
 
 public interface ChatService {
@@ -33,4 +34,9 @@ public interface ChatService {
      * 删除会话
      */
     ChatDeleteVO deleteSession(String sessionId, Long userId);
+    
+    /**
+     * 检测文本中的敏感词
+     */
+    SensitiveWordCheckVO checkSensitiveWords(String content);
 }

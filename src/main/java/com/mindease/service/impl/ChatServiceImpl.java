@@ -9,6 +9,7 @@ import com.mindease.pojo.vo.*;
 import com.mindease.service.ChatService;
 import com.mindease.aiservice.ConsultantService;
 import com.mindease.repository.RedisChatMemoryStore;
+import com.mindease.common.utils.SensitiveWordFilter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -35,6 +37,9 @@ public class ChatServiceImpl implements ChatService {
     
     @Autowired
     private RedisChatMemoryStore redisChatMemoryStore;
+    
+    @Autowired
+    private SensitiveWordFilter sensitiveWordFilter;
 
     @Override
     public ChatSessionCreateVO createSession(Long userId) {
@@ -182,5 +187,27 @@ public class ChatServiceImpl implements ChatService {
         chatDeleteVO.setSuccess(true);
         
         return chatDeleteVO;
+    }
+    
+    @Override
+    public SensitiveWordCheckVO checkSensitiveWords(String content) {
+        SensitiveWordCheckVO result = new SensitiveWordCheckVO();
+        result.setOriginalText(content);
+        
+        if (content == null || content.trim().isEmpty()) {
+            result.setContainsSensitiveWord(false);
+            result.setSensitiveWords(new ArrayList<>());
+            return result;
+        }
+        
+        // 检测是否包含敏感词
+        boolean containsSensitive = sensitiveWordFilter.containsSensitiveWord(content);
+        result.setContainsSensitiveWord(containsSensitive);
+        
+        // 获取所有敏感词
+        List<String> sensitiveWords = sensitiveWordFilter.getAllSensitiveWords(content);
+        result.setSensitiveWords(sensitiveWords);
+        
+        return result;
     }
 }
