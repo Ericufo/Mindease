@@ -59,25 +59,36 @@ public class CounselorServiceImpl implements CounselorService {
         put("恐惧", Arrays.asList("恐惧", "害怕", "回避"));
     }};
 
-    // 情绪类型到关键词映射（支持中英文）
+    // 情绪类型到关键词映射（基于实际数据库 mood_type 字段值）
     private static final Map<String, List<String>> MOOD_TYPE_KEYWORD_MAP = new HashMap<String, List<String>>() {{
-        put("Anxious", Arrays.asList("焦虑", "紧张"));
-        put("焦虑", Arrays.asList("焦虑", "紧张"));
-        put("Depressed", Arrays.asList("抑郁", "情绪低落"));
-        put("抑郁", Arrays.asList("抑郁", "情绪低落"));
-        put("Stressed", Arrays.asList("压力", "疲惫"));
-        put("压力", Arrays.asList("压力", "疲惫"));
-        put("Sad", Arrays.asList("悲伤", "失落"));
-        put("悲伤", Arrays.asList("悲伤", "失落"));
-        put("Angry", Arrays.asList("愤怒", "情绪管理"));
-        put("愤怒", Arrays.asList("愤怒", "情绪管理"));
-        put("Lonely", Arrays.asList("孤独", "社交"));
-        put("孤独", Arrays.asList("孤独", "社交"));
-        put("Happy", Arrays.asList("积极", "正向"));
-        put("开心", Arrays.asList("积极", "正向"));
+        // Anxious - 焦虑：需要专业咨询
+        put("Anxious", Arrays.asList("焦虑", "紧张", "担忧", "恐慌"));
+        
+        // Sad - 悲伤：可能涉及抑郁情绪
+        put("Sad", Arrays.asList("抑郁", "情绪低落", "悲伤", "失落"));
+        
+        // Angry - 愤怒：情绪管理需求
+        put("Angry", Arrays.asList("愤怒", "情绪管理", "冲动控制"));
+        
+        // Tired - 疲惫：压力与倦怠
+        put("Tired", Arrays.asList("压力", "疲惫", "倦怠", "失眠"));
+        
+        // Happy - 开心：积极心理维护（低优先级）
+        put("Happy", Arrays.asList("积极心理", "心理健康"));
+        
+        // Calm - 平静：可能需要压力管理指导（低优先级）
+        put("Calm", Arrays.asList("压力管理", "放松技巧"));
+        
+        // Excited - 兴奋：情绪波动管理（低优先级）
+        put("Excited", Arrays.asList("情绪管理", "情绪波动"));
     }};
 
-    // 中文地名列表（问题7改进）
+    // 负面情绪类型（需要重点关注的情绪）
+    private static final Set<String> NEGATIVE_MOOD_TYPES = new HashSet<>(Arrays.asList(
+        "Anxious", "Sad", "Angry", "Tired"
+    ));
+
+    // 中文地名列表
     private static final Set<String> CHINESE_CITIES = new HashSet<>(Arrays.asList(
         "北京", "上海", "广州", "深圳", "天津", "重庆", "成都", "杭州", "武汉", "西安",
         "南京", "郑州", "长沙", "沈阳", "青岛", "大连", "宁波", "厦门", "济南", "哈尔滨",
@@ -124,22 +135,48 @@ public class CounselorServiceImpl implements CounselorService {
             
             log.info("用户{}情绪类型分布: {}", userId, moodTypeCounts);
             
+            // 优先提取负面情绪关键词
+            List<String> negativeMoodTypes = new ArrayList<>();
+            List<String> positiveMoodTypes = new ArrayList<>();
+            
             for (Map.Entry<String, Long> entry : moodTypeCounts.entrySet()) {
-                // 降低阈值：出现1次以上就提取关键词
                 if (entry.getValue() >= 1) {
-                    List<String> moodKeywords = MOOD_TYPE_KEYWORD_MAP.get(entry.getKey());
+                    if (NEGATIVE_MOOD_TYPES.contains(entry.getKey())) {
+                        negativeMoodTypes.add(entry.getKey());
+                    } else {
+                        positiveMoodTypes.add(entry.getKey());
+                    }
+                }
+            }
+            
+            // 先处理负面情绪
+            for (String moodType : negativeMoodTypes) {
+                List<String> moodKeywords = MOOD_TYPE_KEYWORD_MAP.get(moodType);
+                if (moodKeywords != null) {
+                    keywords.addAll(moodKeywords);
+                    userTags.add(moodType); // 添加情绪类型标签
+                    log.info("从负面情绪类型 {} 提取关键词: {}", moodType, moodKeywords);
+                }
+            }
+            
+            // 如果没有负面情绪，再考虑正面情绪（权重较低）
+            if (keywords.isEmpty() && !positiveMoodTypes.isEmpty()) {
+                for (String moodType : positiveMoodTypes) {
+                    List<String> moodKeywords = MOOD_TYPE_KEYWORD_MAP.get(moodType);
                     if (moodKeywords != null) {
                         keywords.addAll(moodKeywords);
-                        log.info("从情绪类型 {} 提取关键词: {}", entry.getKey(), moodKeywords);
-                    } else {
-                        log.warn("情绪类型 {} 未在映射表中找到，请检查数据库mood_type字段值", entry.getKey());
+                        log.info("从正面情绪类型 {} 提取关键词: {}", moodType, moodKeywords);
                     }
                 }
             }
             
             if (!keywords.isEmpty()) {
                 strategy = "mood_based";
-                basedOn = "近期情绪状态分析";
+                if (!negativeMoodTypes.isEmpty()) {
+                    basedOn = "近期情绪状态分析（" + String.join("、", negativeMoodTypes) + "）";
+                } else {
+                    basedOn = "近期情绪状态分析";
+                }
                 log.info("基于情绪分析提取关键词: {}", keywords);
             } else {
                 // 即使没有提取到关键词，也标记为情绪驱动
@@ -187,7 +224,7 @@ public class CounselorServiceImpl implements CounselorService {
             log.info("用户历史预约咨询师: {}, 完成预约数: {}", historyCounselorIds, completedCount);
         }
 
-        // 【改进9】个性化权重：根据用户预约历史判断消费偏好
+        // 个性化权重：根据用户预约历史判断消费偏好
         UserPreference userPreference = analyzeUserPreference(userId, completedCount);
         log.info("用户偏好分析: {}", userPreference);
 
