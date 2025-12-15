@@ -3,6 +3,7 @@ package com.mindease.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mindease.aiservice.ConsultantService;
 import com.mindease.mapper.MoodLogMapper;
 import com.mindease.pojo.dto.MoodLogDTO;
 import com.mindease.pojo.entity.MoodLog;
@@ -25,6 +26,9 @@ public class MoodServiceImpl implements MoodService {
 
     @Autowired
     private MoodLogMapper moodLogMapper;
+
+    @Autowired
+    private ConsultantService consultantService;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -48,9 +52,14 @@ public class MoodServiceImpl implements MoodService {
         } else {
             moodLog.setTags("[]");
         }
+
+        // 构建情绪分析提示
+        String moodPrompt = buildMoodAnalysisPrompt(moodLogDTO);
+
+        // 调用AI服务获取情绪分析
+        String aiAnalysis = getMoodAnalysis(moodPrompt, userId);
         
-        // TODO: 设置AI分析
-        moodLog.setAiAnalysis("今天也很棒，无论如何请继续加油");
+        moodLog.setAiAnalysis(aiAnalysis);
         
         // 设置创建时间
         moodLog.setCreateTime(LocalDateTime.now());
@@ -64,6 +73,51 @@ public class MoodServiceImpl implements MoodService {
         moodLogVO.setAiAnalysis(moodLog.getAiAnalysis());
         
         return moodLogVO;
+    }
+
+    /**
+     * 构建情绪分析提示
+     */
+    private String buildMoodAnalysisPrompt(MoodLogDTO moodLogDTO) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("我正在记录我的情绪日记，请根据以下信息为我提供情绪分析和建议：\n");
+        prompt.append("情绪类型：").append(moodLogDTO.getMoodType()).append("\n");
+        prompt.append("情绪评分：").append(moodLogDTO.getMoodScore()).append("/10\n");
+
+        if (moodLogDTO.getContent() != null && !moodLogDTO.getContent().isEmpty()) {
+            prompt.append("情绪描述：").append(moodLogDTO.getContent()).append("\n");
+        }
+
+        if (moodLogDTO.getTags() != null && !moodLogDTO.getTags().isEmpty()) {
+            prompt.append("相关标签：").append(String.join("、", moodLogDTO.getTags())).append("\n");
+        }
+
+        prompt.append("\n请给我一个简短、温暖、专业的情绪分析和建议，帮助我更好地理解和处理这种情绪。");
+
+        return prompt.toString();
+    }
+
+    /**
+     * 获取AI情绪分析
+     */
+    private String getMoodAnalysis(String prompt, Long userId) {
+        try {
+            // 使用不需要会话ID的analyzeMood方法
+            String aiResponse = consultantService.analyzeMood(prompt);
+
+            log.info("AI情绪分析响应: {}", aiResponse);
+
+            // 如果响应为空或出错，使用默认回复
+            if (aiResponse == null || aiResponse.trim().isEmpty()) {
+                return "今天也很棒，无论如何请继续加油";
+            }
+
+            return aiResponse;
+        } catch (Exception e) {
+            log.error("获取AI情绪分析失败", e);
+            // 出错时使用默认回复
+            return "今天也很棒，无论如何请继续加油";
+        }
     }
 
     @Override
