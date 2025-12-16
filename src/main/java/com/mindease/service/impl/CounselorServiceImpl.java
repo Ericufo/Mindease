@@ -275,6 +275,9 @@ public class CounselorServiceImpl implements CounselorService {
             // 【改进5】真实检查"今日可约"标签
             List<String> tags = generateTagsWithRealAvailability(profile, finalIsUrgent);
 
+            // 计算最近可用时间
+            String nextAvailableTime = calculateNextAvailableTime(profile.getUserId());
+
             return CounselorRecommendVO.builder()
                     .id(profile.getUserId())
                     .realName(profile.getRealName())
@@ -285,7 +288,7 @@ public class CounselorServiceImpl implements CounselorService {
                     .rating(profile.getRating())
                     .pricePerHour(profile.getPricePerHour())
                     .location(profile.getLocation())
-                    .nextAvailableTime(null)
+                    .nextAvailableTime(nextAvailableTime)
                     .matchReason(matchReason)
                     .tags(tags)
                     .build();
@@ -827,6 +830,44 @@ public class CounselorServiceImpl implements CounselorService {
         } catch (Exception e) {
             log.error("解析 JSON 失败: {}", json, e);
             return new ArrayList<>();
+        }
+    }
+
+    /**
+     * 计算咨询师最近可用时间
+     * 检查今天、明天以及未来7天内的第一个可用时间段
+     * 
+     * @param counselorId 咨询师ID
+     * @return 最近可用时间（格式：yyyy-MM-dd HH:mm），如果没有可用时间则返回null
+     */
+    private String calculateNextAvailableTime(Long counselorId) {
+        try {
+            LocalDate today = LocalDate.now();
+            
+            // 检查未来7天内的排班
+            for (int i = 0; i < 7; i++) {
+                LocalDate checkDate = today.plusDays(i);
+                String dateStr = checkDate.toString(); // yyyy-MM-dd 格式
+                
+                // 获取该日期的可用时间段
+                AvailableSlotsVO slotsVO = appointmentService.getAvailableSlots(counselorId, dateStr);
+                
+                if (slotsVO != null && slotsVO.getSlots() != null && !slotsVO.getSlots().isEmpty()) {
+                    // 找到第一个 available = true 的时间段
+                    for (TimeSlotVO slot : slotsVO.getSlots()) {
+                        if (Boolean.TRUE.equals(slot.getAvailable())) {
+                            // 返回该时间段的开始时间
+                            return dateStr + " " + slot.getStartTime();
+                        }
+                    }
+                }
+            }
+            
+            // 未来7天内没有可用时间
+            return null;
+        } catch (Exception e) {
+            log.error("计算咨询师 {} 的最近可用时间失败", counselorId, e);
+            return null;
         }
     }
 
