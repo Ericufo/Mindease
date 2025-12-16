@@ -12,12 +12,17 @@ public interface MoodLogMapper {
 
     /**
      * 插入情绪日志
+     * 注意：content, tags, ai_analysis 字段会自动加密
      *
      * @param moodLog
      * @return
      */
     @Insert("insert into mood_log(user_id, mood_type, mood_score, content, tags, ai_analysis, log_date) " +
-            "values(#{userId}, #{moodType}, #{moodScore}, #{content}, #{tags}, #{aiAnalysis}, #{logDate})")
+            "values(#{userId}, #{moodType}, #{moodScore}, " +
+            "#{content, typeHandler=com.mindease.common.handler.EncryptedStringTypeHandler}, " +
+            "#{tags, typeHandler=com.mindease.common.handler.EncryptedStringTypeHandler}, " +
+            "#{aiAnalysis, typeHandler=com.mindease.common.handler.EncryptedStringTypeHandler}, " +
+            "#{logDate})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(MoodLog moodLog);
 
@@ -29,6 +34,7 @@ public interface MoodLogMapper {
      * @return
      */
     @Select("select * from mood_log where user_id = #{userId} and log_date >= #{startDate} order by log_date desc")
+    @ResultMap("MoodLogEncryptedResultMap")
     List<MoodLog> getRecentMoodLogs(@Param("userId") Long userId, @Param("startDate") LocalDateTime startDate);
 
     /**
@@ -47,6 +53,7 @@ public interface MoodLogMapper {
      * @return
      */
     @Select("select * from mood_log where id = #{id}")
+    @ResultMap("MoodLogEncryptedResultMap")
     MoodLog getById(Long id);
 
     /**
@@ -58,6 +65,7 @@ public interface MoodLogMapper {
      * @return
      */
     @Select("select * from mood_log where user_id = #{userId} order by log_date desc limit #{limit} offset #{offset}")
+    @ResultMap("MoodLogEncryptedResultMap")
     List<MoodLog> getByUserIdWithPagination(@Param("userId") Long userId, @Param("limit") Integer limit, @Param("offset") Integer offset);
 
     /**
@@ -87,6 +95,7 @@ public interface MoodLogMapper {
      * @return
      */
     @Select("select * from mood_log where user_id = #{userId} and log_date between #{startDate} and #{endDate} order by log_date asc")
+    @ResultMap("MoodLogEncryptedResultMap")
     List<MoodLog> getByUserIdAndDateRange(@Param("userId") Long userId, @Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     /**

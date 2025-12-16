@@ -29,6 +29,8 @@ mindease:
   jwt:
     secret-key: mindease-jwt-secret-key-2024-secure-key-for-hmac-sha256
     ttl: 7200000
+  security:
+    aes-key: ${mindease.security.aes-key}
 
 langchain4j:
   community:

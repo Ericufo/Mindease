@@ -3,12 +3,26 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
 <mapper namespace="com.mindease.mapper.ChatMessageMapper">
     
+    <!-- ChatMessage 加密字段映射 -->
+    <resultMap id="ChatMessageEncryptedResultMap" type="com.mindease.pojo.entity.ChatMessage">
+        <id property="id" column="id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="messageRole" column="message_role"/>
+        <!-- 加密字段：使用自定义TypeHandler -->
+        <result property="content" column="content" typeHandler="com.mindease.common.handler.EncryptedStringTypeHandler"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateTime" column="update_time"/>
+    </resultMap>
+    
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO chat_message (session_id, user_id, message_role, content, create_time, update_time)
-        VALUES (#{sessionId}, #{userId}, #{messageRole}, #{content}, #{createTime}, #{updateTime})
+        VALUES (#{sessionId}, #{userId}, #{messageRole}, 
+                #{content, typeHandler=com.mindease.common.handler.EncryptedStringTypeHandler}, 
+                #{createTime}, #{updateTime})
     </insert>
     
-    <select id="selectBySessionId" resultType="com.mindease.pojo.entity.ChatMessage">
+    <select id="selectBySessionId" resultMap="ChatMessageEncryptedResultMap">
         SELECT id, session_id, user_id, message_role, content, create_time, update_time
         FROM chat_message
         WHERE session_id = #{sessionId}
@@ -16,7 +30,7 @@
         LIMIT #{limit}
     </select>
     
-    <select id="selectBySessionIdAndUserId" resultType="com.mindease.pojo.entity.ChatMessage">
+    <select id="selectBySessionIdAndUserId" resultMap="ChatMessageEncryptedResultMap">
         SELECT id, session_id, user_id, message_role, content, create_time, update_time
         FROM chat_message
         WHERE session_id = #{sessionId} AND user_id = #{userId}

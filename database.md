@@ -90,9 +90,9 @@
 | user_id | BIGINT | 用户 ID |
 | mood_type | VARCHAR(32) | 情绪类型 (Happy, Sad, Anxious...) |
 | mood_score | INT | 评分 (0-10) |
-| content | TEXT | 日记内容 |
-| tags | JSON | 标签数组 `["下雨", "加班"]` |
-| ai_analysis | TEXT | AI 分析建议 |
+| content | TEXT | 日记内容（🔒 AES-256-GCM 加密存储） |
+| tags | TEXT | 标签数组（🔒 AES-256-GCM 加密存储，应用层解析为 JSON） |
+| ai_analysis | TEXT | AI 分析建议（🔒 AES-256-GCM 加密存储） |
 | log_date | DATETIME | 日记归属日期 |
 
 ---
@@ -153,7 +153,7 @@
 | **id** | BIGINT | **主键** |
 | session_id | VARCHAR(64) | 会话 ID |
 | sender | VARCHAR(20) | 发送者 (`user`, `AI`) |
-| content | TEXT | 消息内容 |
+| content | TEXT | 消息内容（🔒 AES-256-GCM 加密存储） |
 
 ---
 
@@ -276,9 +276,9 @@ CREATE TABLE `mood_log` (
     `user_id` BIGINT NOT NULL COMMENT '用户ID',
     `mood_type` VARCHAR(32) NOT NULL COMMENT '情绪类型',
     `mood_score` INT NOT NULL COMMENT '评分(0-10)',
-    `content` TEXT COMMENT '日记内容',
-    `tags` JSON COMMENT '标签JSON数组',
-    `ai_analysis` TEXT COMMENT 'AI分析建议',
+    `content` TEXT COMMENT '日记内容（AES-256-GCM加密存储）',
+    `tags` TEXT COMMENT '标签JSON数组（AES-256-GCM加密存储）',
+    `ai_analysis` TEXT COMMENT 'AI分析建议（AES-256-GCM加密存储）',
     `log_date` DATETIME NOT NULL COMMENT '日记归属日期',
     `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
