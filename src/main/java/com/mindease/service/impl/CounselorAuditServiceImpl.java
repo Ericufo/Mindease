@@ -122,6 +122,22 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
         List<AuditListItemVO> list = records.stream()
                 .map(record -> {
                     User user = userMapper.getById(record.getUserId());
+
+                    CounselorProfile profile = counselorProfileMapper.getByUserId(record.getUserId());
+                    
+                    // 解析专长领域 JSON 数组
+                    List<String> specialtyList = null;
+                    if (profile != null && profile.getSpecialty() != null && !profile.getSpecialty().trim().isEmpty()) {
+                        try {
+                            specialtyList = objectMapper.readValue(
+                                profile.getSpecialty(), 
+                                objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+                            );
+                        } catch (JsonProcessingException e) {
+                            log.error("解析专长领域失败，userId:{}", record.getUserId(), e);
+                        }
+                    }
+                    
                     return AuditListItemVO.builder()
                             .auditId(record.getId())
                             .userId(record.getUserId())
@@ -129,6 +145,13 @@ public class CounselorAuditServiceImpl implements CounselorAuditService {
                             .realName(record.getRealName())
                             .qualificationUrl(record.getQualificationUrl())
                             .submitTime(record.getCreateTime())
+                            // 【新增】咨询师详细信息
+                            .title(profile != null ? profile.getTitle() : null)
+                            .experienceYears(profile != null ? profile.getExperienceYears() : null)
+                            .bio(profile != null ? profile.getBio() : null)
+                            .location(profile != null ? profile.getLocation() : null)
+                            .pricePerHour(profile != null ? profile.getPricePerHour() : null)
+                            .specialty(specialtyList)
                             .build();
                 })
                 .collect(Collectors.toList());

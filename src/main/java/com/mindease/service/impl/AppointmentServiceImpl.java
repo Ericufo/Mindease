@@ -141,11 +141,20 @@ public class AppointmentServiceImpl implements AppointmentService {
                 
                 // 只添加未存在的时段
                 if (!slotMap.containsKey(slotKey)) {
+                    // 获取当前时间
+                    LocalDateTime now = LocalDateTime.now();
+                    
+                    // 检查时间段是否已过去：如果时间段的结束时间已经小于或等于当前时间，则不可用
+                    boolean isPast = slotEnd.isBefore(now) || slotEnd.isEqual(now);
+                    
                     // 检查是否已被预约
-                    boolean isAvailable = existingAppointments.stream()
-                            .noneMatch(apt ->
+                    boolean isBooked = existingAppointments.stream()
+                            .anyMatch(apt ->
                                     (apt.getStartTime().isBefore(slotEnd) && apt.getEndTime().isAfter(slotStart))
                             );
+                    
+                    // 时间段可用 = 未过去 && 未被预约
+                    boolean isAvailable = !isPast && !isBooked;
 
                     slotMap.put(slotKey, TimeSlotVO.builder()
                             .startTime(currentStart.format(timeFormatter))
