@@ -276,6 +276,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                     .targetName(targetName)
                     .targetAvatar(targetAvatar)
                     .targetRole(targetRole)
+                    .userId(apt.getUserId())  // 添加用户ID字段（咨询师需要此字段调用报告导出接口）
                     .build();
         }).collect(Collectors.toList());
 
@@ -309,6 +310,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .status(appointment.getStatus())
                 .userNote(appointment.getUserNote())
                 .cancelReason(appointment.getCancelReason())
+                .userId(appointment.getUserId())  // 添加用户ID字段（咨询师需要此字段调用报告导出接口）
                 .build();
     }
 

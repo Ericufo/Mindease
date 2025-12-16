@@ -418,15 +418,15 @@ public class AssessmentServiceImpl implements AssessmentService {
             // 忽略 deleted 标记和 id，全部当作新题目插入
             String optionsJson = toJson(questionItem.getOptions());
 
-            AssessmentQuestion question = AssessmentQuestion.builder()
-                    .scaleKey(scaleKey)
-                    .questionText(questionItem.getQuestionText())
-                    .options(optionsJson)
-                    .sortOrder(questionItem.getSortOrder())
-                    .build();
+                AssessmentQuestion question = AssessmentQuestion.builder()
+                        .scaleKey(scaleKey)
+                        .questionText(questionItem.getQuestionText())
+                        .options(optionsJson)
+                        .sortOrder(questionItem.getSortOrder())
+                        .build();
 
-            assessmentQuestionMapper.insert(question);
-            count++;
+                assessmentQuestionMapper.insert(question);
+                count++;
             log.info("插入题目 {}/{}: {}", count, questionManageDTO.getQuestions().size(), questionItem.getQuestionText());
         }
 

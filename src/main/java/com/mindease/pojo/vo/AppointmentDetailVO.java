@@ -27,5 +27,7 @@ public class AppointmentDetailVO {
     private String userNote;
 
     private String cancelReason;
+
+    private Long userId;
 }
 

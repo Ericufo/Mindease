@@ -124,7 +124,7 @@ public class CounselorServiceImpl implements CounselorService {
                     .orElse(10.0);
 
             log.info("用户{}情绪平均分: {}", userId, avgScore);
-            
+
             if (avgScore < 4) {
                 isUrgent = true;
                 userTags.add("紧急");

@@ -25,5 +25,7 @@ public class AppointmentListItemVO {
     private String targetAvatar;
 
     private String targetRole;
+    
+    private Long userId;
 }
 
