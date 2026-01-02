@@ -27,7 +27,7 @@ mybatis:
 
 mindease:
   jwt:
-    secret-key: mindease-jwt-secret-key-2024-secure-key-for-hmac-sha256
+    secret-key: ${mindease.jwt.secret-key}
     ttl: 7200000
   security:
     aes-key: ${mindease.security.aes-key}
